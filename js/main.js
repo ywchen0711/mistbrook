@@ -7,6 +7,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { buildWorld, groundY, SPOTS, STREAM, OCC } from './world.js';
 import { buildModel, animate, play } from './actors.js';
+import { setActorEnv, duskEnv, setDetail } from './models.js';
 import { FX } from './fx.js';
 import * as UI from './ui.js';
 import { HEROES, FOES, AB, DEFAULT_AB, mod, skillBonus, SKILLS, sgn } from './rules.js';
@@ -36,6 +37,7 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure
 renderer.shadowMap.enabled = Q !== 'low'; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 $('#stage').appendChild(renderer.domElement);
 const canvas = renderer.domElement;
+setActorEnv(duskEnv(renderer)); setDetail(Q);
 const scene = new THREE.Scene();
 const FOG = new THREE.Color('#6e5560');
 scene.fog = new THREE.Fog(FOG.clone(), 38, 105);
@@ -144,12 +146,12 @@ function portrait(a) {
   const s = a.rig.body.scale.x * a.rig.head.scale.x;
   const cam = new THREE.PerspectiveCamera(30, 1, 0.05, 20);
   if (a.rig.wolf) { cam.position.set(hp.x + 0.5, hp.y + 0.1, hp.z + 0.9); cam.lookAt(hp); }
-  else { cam.position.set(hp.x + 0.22 * s, hp.y + 0.05 * s, hp.z + 0.85 * s); cam.lookAt(hp.x, hp.y - 0.05 * s, hp.z); }
-  const S = 128, pr = renderer.getPixelRatio();
+  else { cam.position.set(hp.x + 0.16 * s, hp.y + 0.03 * s, hp.z + 0.6 * s); cam.lookAt(hp.x, hp.y - 0.045 * s, hp.z); }
+  const S = 192, pr = renderer.getPixelRatio();
   renderer.setScissorTest(true); renderer.setViewport(0, 0, S, S); renderer.setScissor(0, 0, S, S);
   const fog = ps.fog; renderer.render(ps, cam);
-  const c = document.createElement('canvas'); c.width = c.height = 128;
-  c.getContext('2d').drawImage(canvas, 0, canvas.height - S * pr, S * pr, S * pr, 0, 0, 128, 128);
+  const c = document.createElement('canvas'); c.width = c.height = S;
+  c.getContext('2d').drawImage(canvas, 0, canvas.height - S * pr, S * pr, S * pr, 0, 0, S, S);
   renderer.setScissorTest(false); renderer.setViewport(0, 0, innerWidth, innerHeight);
   parent.add(a.root); a.pos.copy(p0); a.root.rotation.y = r0; a.ring.visible = true; a.anim.pose = pose;
   return c.toDataURL('image/jpeg', 0.9);

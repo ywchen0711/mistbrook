@@ -15,6 +15,7 @@ There are four endings. Which one you get depends on what you find out and what 
 - A three.js scene viewed from a tilted, rotatable camera. The sun is low and gives long shadows, and firelight, lamps and glowing windows bloom against the dusk. There is fog, swaying grass and trees, fireflies, chimney smoke and mist drifting over the stream.
 - Trees and buildings between the camera and your party are dithered away, so you can always see your people.
 - Characters are built and animated in code: walking, attacks, spells, getting hit, going down. Each party member has a ring under their feet, and their portrait is rendered from the 3D model.
+- The models aim for a grounded, realistic look. They have human proportions and sculpted faces with eyelids, brows, noses and lips. Armor is layered from plates, mail, leather and cloth, and every surface gets a painted texture with bump detail. Shields carry painted heraldry, and metal reflects a dusk sky. Goblins hunch and have wrinkled skin and claws, skeletons are built bone by bone, and wolves have a two-tone coat and a jaw that opens when they bite.
 
 ## How it plays
 
@@ -57,7 +58,8 @@ In combat on touch, the first tap on a target shows the preview and the second t
 
 - `js/main.js` sets up the renderer, post-processing, camera and input. It also runs exploration, the dialogue glue, saving and the endings.
 - `js/world.js` builds the map: the painted ground, stream and bridge, houses, the camp, the ruins, trees and grass, and the see-through shader.
-- `js/actors.js` builds character models and runs their procedural animation.
+- `js/models.js` builds the character and creature models: painted textures, sculpted heads, hair, armor, weapons and shields.
+- `js/actors.js` runs their procedural animation.
 - `js/combat.js` handles initiative, attacks, spells and enemy AI.
 - `js/rules.js` holds dice, stats, heroes, enemies and abilities.
 - `js/story.js` holds dialogue trees, spawns and endings.
