@@ -288,6 +288,18 @@ function tube(pts, r, o = {}) {
   g.computeVertexNormals();
   return g;
 }
+// average normals of vertices that share a position, so sphere seams don't show
+function weld(g) {
+  g.computeVertexNormals();
+  const p = g.attributes.position, nm = g.attributes.normal, map = new Map();
+  for (let i = 0; i < p.count; i++) { const k = Math.round(p.getX(i) * 1e5) + ',' + Math.round(p.getY(i) * 1e5) + ',' + Math.round(p.getZ(i) * 1e5); if (!map.has(k)) map.set(k, []); map.get(k).push(i); }
+  for (const ids of map.values()) {
+    if (ids.length < 2) continue;
+    const v = new V3(); for (const i of ids) v.x += nm.getX(i), v.y += nm.getY(i), v.z += nm.getZ(i);
+    v.normalize(); for (const i of ids) nm.setXYZ(i, v.x, v.y, v.z);
+  }
+  return g;
+}
 // a sphere whose every direction is mapped through f(x,y,z) -> [X,Y,Z] (and optional colour)
 function warpSphere(f, ws = 48, hs = 32, colorFn) {
   const g = new THREE.SphereGeometry(1, seg(ws), seg(hs)), p = g.attributes.position, col = colorFn ? new Float32Array(p.count * 3) : null;
@@ -296,8 +308,20 @@ function warpSphere(f, ws = 48, hs = 32, colorFn) {
     if (col) { const c = colorFn(x, y, z); col[i * 3] = c[0]; col[i * 3 + 1] = c[1]; col[i * 3 + 2] = c[2]; }
   }
   if (col) g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  g.computeVertexNormals();
-  return g;
+  return weld(g);
+}
+// same, but the pole faces forward and the rings crowd around it, so the face gets the detail
+function faceSphere(f, ws = 72, hs = 60, colorFn) {
+  const g = new THREE.SphereGeometry(1, seg(ws), seg(hs)); g.rotateX(Math.PI / 2);
+  const p = g.attributes.position, col = colorFn ? new Float32Array(p.count * 3) : null;
+  for (let i = 0; i < p.count; i++) {
+    const x0 = p.getX(i), y0 = p.getY(i), z0 = p.getZ(i), th = Math.acos(Math.max(-1, Math.min(1, z0))), ph = Math.atan2(y0, x0);
+    const t2 = Math.PI * Math.pow(th / Math.PI, 1.4), r = Math.sin(t2), x = r * Math.cos(ph), y = r * Math.sin(ph), z = Math.cos(t2);
+    const q = f(x, y, z); p.setXYZ(i, q[0], q[1], q[2]);
+    if (col) { const c = colorFn(x, y, z); col[i * 3] = c[0]; col[i * 3 + 1] = c[1]; col[i * 3 + 2] = c[2]; }
+  }
+  if (col) g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return weld(g);
 }
 // ellipsoid with an optional flattened underside (feet, paws)
 function blob(rx, ry, rz, flat = -1, ws = 14, hs = 10) {
@@ -327,34 +351,54 @@ function bake(root) {
 // ---------------------------------------------------------------------------
 // heads
 const HEAD = {
-  man:    { w: 0.08, h: 0.116, d: 0.098, jaw: 0.2, chin: 0.007, brow: 0.0055, socket: 0.0075, cheek: 0.005, lips: 0.003, back: 0.14, muzzle: 0, nose: 1 },
-  woman:  { w: 0.075, h: 0.11, d: 0.095, jaw: 0.28, chin: 0.004, brow: 0.003, socket: 0.0065, cheek: 0.0055, lips: 0.0042, back: 0.14, muzzle: 0, nose: 0.82 },
-  old:    { w: 0.079, h: 0.114, d: 0.097, jaw: 0.24, chin: 0.006, brow: 0.0075, socket: 0.009, cheek: 0.0075, lips: 0.002, back: 0.12, muzzle: 0, nose: 1.1 },
+  man:    { w: 0.079, h: 0.114, d: 0.098, jaw: 0.1, jawAngle: 0.006, chin: 0.009, brow: 0.0055, socket: 0.007, cheek: 0.005, lips: 0.0038, back: 0.14, muzzle: 0, nose: 1 },
+  woman:  { w: 0.075, h: 0.108, d: 0.095, jaw: 0.2, jawAngle: 0.002, chin: 0.006, brow: 0.003, socket: 0.006, cheek: 0.006, lips: 0.005, back: 0.14, muzzle: 0, nose: 0.82 },
+  old:    { w: 0.079, h: 0.114, d: 0.097, jaw: 0.14, jawAngle: 0.004, chin: 0.006, brow: 0.0075, socket: 0.009, cheek: 0.0075, lips: 0.002, back: 0.12, muzzle: 0, nose: 1.1 },
   kid:    { w: 0.078, h: 0.108, d: 0.094, jaw: 0.4, chin: 0.003, brow: 0.002, socket: 0.006, cheek: 0.004, lips: 0.003, back: 0.16, muzzle: 0, nose: 0.65, eyeR: 1.12 },
   goblin: { w: 0.088, h: 0.1, d: 0.1, jaw: 0.14, chin: 0.004, brow: 0.014, socket: 0.006, cheek: 0.009, lips: 0.004, back: 0.2, muzzle: 0.016, nose: 1.9, mouthW: 1.5, eyeR: 1.25 },
   skull:  { w: 0.071, h: 0.104, d: 0.094, jaw: 0.5, chin: 0, brow: 0.008, socket: 0.02, cheek: 0.011, lips: 0, back: 0.12, muzzle: 0.004, nose: 0 },
 };
 function headShape(P) {
+  const mw = P.mouthW || 1, n = P.nose || 0;
   return (x, y, z) => {
     let X = x * P.w, Y = y * P.h, Z = z * P.d;
-    const f = sm(0.15, 0.75, z), ax = Math.abs(x);
+    const f = sm(0.1, 0.7, z), ax = Math.abs(x);
+    // jaw narrows towards the chin, the skull is fuller at the back
     if (y < 0) { const k = sm(0, 1, -y); X *= 1 - P.jaw * k * k * (0.5 + 0.5 * f); Z *= 1 - 0.2 * k * k * (1 - f); }
     if (z < 0) Z *= 1 + P.back * -z * sm(-0.6, 0.4, y);
     if (y > 0.5) Y *= 1 - 0.06 * sm(0.5, 1, y);
-    X *= 1 - 0.06 * sm(0.3, 0.9, z) * sm(-0.2, 0.3, y);
+    // flatter sides and a flatter face plane, so it reads as a head rather than a ball
+    X *= 1 - 0.07 * sm(0.3, 0.9, z) * sm(-0.3, 0.3, y);
+    Z -= P.d * 0.07 * sm(0.55, 1, z) * sm(-0.7, -0.2, y) * (1 - sm(0.3, 0.6, y));
     let dz = 0, dx = 0;
-    dz -= P.socket * G1(ax - 0.36, 0.13) * G1(y - 0.06, 0.1) * f;
-    dz += P.brow * G1(ax - 0.3, 0.22) * G1(y - 0.25, 0.07) * f + P.brow * 0.6 * G1(x, 0.1) * G1(y - 0.2, 0.08) * f;
-    const cb = P.cheek * G1(ax - 0.56, 0.15) * G1(y + 0.12, 0.12) * f; dz += cb * 0.6; dx += cb * Math.sign(x);
-    dz += P.chin * G1(x, 0.22) * G1(y + 0.86, 0.13);
-    const mw = P.mouthW || 1;
-    dz += P.lips * (G1(x, 0.16 * mw) * G1(y + 0.47, 0.05) + 0.9 * G1(x, 0.14 * mw) * G1(y + 0.6, 0.05)) * f;
+    // eye sockets under a brow ridge, a dip at the bridge of the nose
+    dz -= P.socket * G1(ax - 0.34, 0.12) * G1(y - 0.05, 0.085) * f;
+    dz += P.brow * G1(ax - 0.3, 0.2) * G1(y - 0.2, 0.065) * f + P.brow * 0.5 * G1(x, 0.1) * G1(y - 0.2, 0.07) * f;
+    dz -= 0.0018 * G1(x, 0.08) * G1(y - 0.12, 0.05) * f;
+    // cheekbones
+    const cb = P.cheek * G1(ax - 0.55, 0.15) * G1(y + 0.1, 0.12) * f; dz += cb * 0.6; dx += cb * Math.sign(x);
+    // nose: a ridge that grows from the bridge to a rounded tip, with wings at the base
+    if (n) {
+      const up = sm(0.2, -0.27, y), down = 1 - sm(-0.25, -0.43, y);
+      dz += 0.023 * n * Math.pow(up, 1.45) * down * G1(x, (0.06 + 0.075 * up) * (0.85 + 0.15 * n)) * f;
+      dz += 0.004 * n * G1(x, 0.09) * G1(y + 0.26, 0.045) * f;
+      dz += 0.0055 * n * G1(ax - 0.13 * (0.8 + 0.2 * n), 0.05) * G1(y + 0.31, 0.045) * f;
+      dz -= 0.001 * G1(ax - 0.22, 0.05) * G1(y + 0.28, 0.08) * f;
+    }
+    // lips with a philtrum and a mouth line
+    dz += P.lips * (G1(x, 0.15 * mw) * G1(y + 0.48, 0.04) + 1.1 * G1(x, 0.13 * mw) * G1(y + 0.59, 0.045)) * f;
+    dz -= P.lips * 0.7 * G1(x, 0.16 * mw) * G1(y + 0.535, 0.022) * f;
+    dz -= 0.0012 * G1(x, 0.03) * G1(y + 0.41, 0.04) * f;
+    dz -= 0.0015 * G1(ax - 0.17 * mw, 0.04) * G1(y + 0.53, 0.06) * f;
+    if (P.jawAngle) dx += P.jawAngle * G1(ax - 0.7, 0.18) * G1(y + 0.55, 0.15) * Math.sign(x);
+    // chin and, for goblins, a pushed-out muzzle
+    dz += P.chin * G1(x, 0.22) * G1(y + 0.84, 0.12);
     dz += P.muzzle * G1(x, 0.34 * mw) * G1(y + 0.42, 0.24) * f;
     return [X + dx, Y, Z + dz];
   };
 }
 function headColor(P, o) {
-  const lip = o.lipCol || [0.8, 0.58, 0.56], paint = o.paint;
+  const lip = o.lipCol || [0.78, 0.5, 0.48], paint = o.paint;
   return (x, y, z) => {
     const f = sm(0.15, 0.75, z), ax = Math.abs(x), mw = P.mouthW || 1;
     let c = [1, 1, 1];
@@ -367,7 +411,9 @@ function headColor(P, o) {
     }
     mix(0.18 * G1(ax - 0.36, 0.15) * G1(y - 0.04, 0.12) * f, [0.62, 0.5, 0.5]);
     mix(0.3 * G1(ax - 0.5, 0.14) * G1(y + 0.2, 0.14) * f, [1.0, 0.78, 0.74]);
-    mix(sm(0.25, 0.75, G1(x, 0.16 * mw) * G1(y + 0.535, 0.055)) * f, lip);
+    mix(sm(0.2, 0.75, G1(x, 0.15 * mw) * G1(y + 0.535, 0.06)) * f, lip);
+    mix(0.6 * G1(x, 0.15 * mw) * G1(y + 0.535, 0.015) * f, [0.45, 0.28, 0.26]);
+    mix(0.25 * G1(ax - 0.34, 0.12) * G1(y - 0.15, 0.03) * f, [0.6, 0.45, 0.42]);
     if (o.stubble) mix(0.4 * sm(-0.1, -0.45, y) * sm(-0.3, 0.2, z) * (1 - G1(x, 0.2) * G1(y + 0.53, 0.07)), o.stubble);
     if (paint) mix(paint(x, y, z), o.paintCol);
     return c;
@@ -385,7 +431,7 @@ function buildHead(K, head, o) {
     for (const sd of [-1, 1]) head.add(mk(new THREE.SphereGeometry(0.011, 8, 6), K.mat('eyeglow', o.eyes, null, { emissive: o.eyes, emissiveIntensity: 3 }), sd * 0.03, 0.006, 0.083));
     return;
   }
-  head.add(mk(warpSphere(S, 56, 42, headColor(P, o)), face));
+  head.add(mk(faceSphere(S, 72, 60, headColor(P, o)), face));
   const skin = K.mat('skin');
   if (o.skeleton) {
     // jaw and teeth
@@ -397,40 +443,31 @@ function buildHead(K, head, o) {
     return;
   }
   // eyes
-  const er = 0.0106 * (P.eyeR || 1);
-  const white = K.mat('eyewhite', o.goblin ? '#e0d890' : '#ece6dc', null, { roughness: 0.12 });
+  const er = 0.0122 * (P.eyeR || 1);
+  const white = K.mat('eyewhite', o.goblin ? '#e0d890' : '#efe8de', null, { roughness: 0.08 });
   const iris = o.goblin ? K.mat('iris', o.eyes, null, { emissive: o.eyes, emissiveIntensity: 0.9, roughness: 0.2 }) : K.mat('iris', o.eye || '#4a3424', null, { roughness: 0.25 });
   const pupil = K.mat('pupil', '#080606', null, { roughness: 0.1 });
   for (const sd of [-1, 1]) {
-    const s0 = at(sd * 0.36, 0.06), c = new V3(s0.x, s0.y, s0.z - er * 0.45);
+    const s0 = at(sd * 0.33, 0.04), c = new V3(s0.x, s0.y, s0.z - er * 0.42);
     const eg = grp(head, c.x, c.y, c.z); eg.rotation.y = sd * 0.08;
     eg.add(mk(new THREE.SphereGeometry(er, 16, 12), white));
-    const ir = mk(new THREE.SphereGeometry(er * 1.008, 16, 6, 0, TAU, 0, o.goblin ? 0.75 : 0.52), iris); ir.rotation.x = Math.PI / 2; eg.add(ir);
-    const pu = mk(new THREE.SphereGeometry(er * 1.014, 12, 4, 0, TAU, 0, o.goblin ? 0.16 : 0.22), pupil); pu.rotation.x = Math.PI / 2; if (o.goblin) pu.scale.set(0.45, 1, 1); eg.add(pu);
-    const up = mk(new THREE.SphereGeometry(er * 1.13, 16, 6, 0, TAU, 0, o.sleepy ? 1.08 : 0.98), skin); up.rotation.x = o.goblin ? 0.5 : 0.42; eg.add(up);
-    const lo = mk(new THREE.SphereGeometry(er * 1.1, 16, 5, 0, TAU, Math.PI - 1.05, 1.05), skin); lo.rotation.x = -0.34; eg.add(lo);
+    const ir = mk(new THREE.SphereGeometry(er * 1.008, 16, 6, 0, TAU, 0, o.goblin ? 0.75 : 0.66), iris); ir.rotation.x = Math.PI / 2; eg.add(ir);
+    const pu = mk(new THREE.SphereGeometry(er * 1.014, 12, 4, 0, TAU, 0, o.goblin ? 0.16 : 0.25), pupil); pu.rotation.x = Math.PI / 2; if (o.goblin) pu.scale.set(0.45, 1, 1); eg.add(pu);
+    const up = mk(new THREE.SphereGeometry(er * 1.1, 18, 8, 0, TAU, 0, o.sleepy ? 1.12 : 1.0), skin); up.rotation.x = o.goblin ? 0.5 : 0.36; eg.add(up);
+    const lo = mk(new THREE.SphereGeometry(er * 1.07, 18, 6, 0, TAU, Math.PI - 1.1, 1.1), skin); lo.rotation.x = -0.3; eg.add(lo);
     // lash line
-    const lash = mk(new THREE.TorusGeometry(er * 1.1, er * 0.09, 4, 14, Math.PI * 0.9), K.mat('lash', '#1a120c', null, { roughness: 0.6 })); lash.rotation.set(-0.95 + (o.goblin ? -0.2 : 0), 0, Math.PI * 0.05); lash.position.set(0, er * 0.12, er * 0.25); eg.add(lash);
+    const lash = mk(new THREE.TorusGeometry(er * 1.08, er * 0.07, 4, 16, Math.PI * 0.9), K.mat('lash', '#1a120c', null, { roughness: 0.6 })); lash.rotation.set(-0.95 + (o.goblin ? -0.2 : 0), 0, Math.PI * 0.05); lash.position.set(0, er * 0.12, er * 0.25); eg.add(lash);
     // brows
     if (!o.noBrow) {
       const bm = K.mat('brow', o.brow || o.hair || '#222', 'hair');
-      const p = [[0.12, 0.25], [0.3, 0.3 + (o.goblin ? -0.05 : 0)], [0.5, 0.25]].map(([ux, uy]) => { const v = at(sd * ux, uy + (o.goblin && ux < 0.2 ? -0.06 : 0)); v.z += 0.0015; return v; });
-      head.add(mk(tube(p, (t) => (o.bushy ? 0.0055 : 0.0036) * (1.15 - 0.6 * t), { n: 10, radial: 6, flat: [1, 0.45] }), bm));
+      const p = [[0.1, 0.2], [0.28, 0.235 + (o.goblin ? -0.05 : 0)], [0.48, 0.2]].map(([ux, uy]) => { const v = at(sd * ux, uy + (o.goblin && ux < 0.2 ? -0.06 : 0)); v.z += 0.0008; return v; });
+      head.add(mk(tube(p, (t) => (o.bushy ? 0.006 : 0.0048) * (1.2 - 0.6 * t), { n: 12, radial: 6, flat: [1, 0.35] }), bm));
     }
-  }
-  // nose
-  if (P.nose) {
-    const k = P.nose, top = at(0, 0.1), tip = at(0, -0.27);
-    const tipZ = tip.z + 0.0125 * k, tipY = tip.y - (o.goblin ? 0.012 : 0);
-    const curve = [[0, top.y, top.z - 0.004], [0, lerp(top.y, tipY, 0.45), lerp(top.z, tipZ, 0.4) + 0.002 * k], [0, tipY + 0.006, tipZ - 0.002], [0, tipY - 0.002, tipZ - 0.012 * k]];
-    head.add(mk(tube(curve, (t) => (0.0034 + 0.0034 * Math.pow(t, 1.3)) * (0.8 + 0.3 * k), { n: 12, radial: 10 }), skin));
-    head.add(mk(new THREE.SphereGeometry(0.0068 * (0.75 + 0.3 * k), 12, 10), skin, 0, tipY + 0.002, tipZ - 0.003));
-    for (const sd of [-1, 1]) { const w = mk(new THREE.SphereGeometry(0.0058 * (0.75 + 0.3 * k), 10, 8), skin, sd * 0.0085 * (0.8 + 0.25 * k), tipY - 0.002, tipZ - 0.01 * k); w.scale.set(1, 0.8, 1); head.add(w); }
   }
   // mouth
   const mw = P.mouthW || 1, ml = at(0, -0.535);
-  const mouth = [[-0.019 * mw, ml.y + 0.0015, ml.z - 0.006], [-0.008 * mw, ml.y, ml.z - 0.0012], [0.008 * mw, ml.y, ml.z - 0.0012], [0.019 * mw, ml.y + 0.0015 + (o.smirk ? 0.002 : 0), ml.z - 0.006]];
-  head.add(mk(tube(mouth, 0.0011, { n: 8, radial: 5 }), K.mat('mouth', '#3a1814', null, { roughness: 0.5 })));
+  const mouth = [[-0.018 * mw, ml.y + 0.001, ml.z - 0.005], [-0.008 * mw, ml.y, ml.z - 0.0004], [0.008 * mw, ml.y, ml.z - 0.0004], [0.018 * mw, ml.y + 0.001 + (o.smirk ? 0.002 : 0), ml.z - 0.005]];
+  head.add(mk(tube(mouth, 0.0007, { n: 8, radial: 5 }), K.mat('mouth', '#4a2420', null, { roughness: 0.5 })));
   if (o.goblin) {
     const tm = K.mat('teeth', '#e8dfb8', null, { roughness: 0.4 });
     for (const sd of [-1, 1]) { const t = mk(new THREE.ConeGeometry(0.0045, 0.016, 6), tm, sd * 0.012 * mw, ml.y + 0.004, ml.z - 0.001); t.rotation.x = -0.2; head.add(t); }
@@ -439,7 +476,7 @@ function buildHead(K, head, o) {
   // ears
   const ear = o.goblin ? 'goblin' : o.elf ? 'elf' : 'human';
   for (const sd of [-1, 1]) {
-    const e = at(sd * 0.985, -0.02);
+    const e = new V3(...K.shape(sd * 0.985, -0.05, -0.16));
     let g;
     if (ear === 'human') g = warpSphere((x, y, z) => [x * 0.008 + (z > 0 ? 0 : 0.002) * sd, y * 0.03 * (y > 0 ? 1 : 0.85), z * 0.019 - 0.004 * y], 12, 10);
     else {
@@ -448,18 +485,17 @@ function buildHead(K, head, o) {
     }
     const em = mk(g, skin, e.x - sd * 0.003, e.y, e.z);
     if (ear === 'human') em.rotation.y = sd * 0.25;
-    else if (ear === 'elf') { em.rotation.set(-0.7, 0, -sd * 0.35); em.position.y += 0.004; }
-    else { em.rotation.set(-0.45, sd * 0.35, -sd * 1.05); }
-    if (sd < 0 && ear !== 'human') em.scale.x = -1;
+    else if (ear === 'elf') { em.rotation.set(0.55, sd * 0.2, -sd * 0.3); em.position.y += 0.004; }
+    else { em.rotation.set(0.25, sd * 0.35, -sd * 1.05); }
     head.add(em);
   }
 }
 
 // hair, beards and hoods are shells around the head shape: inside the covered area the
 // surface is pushed outward, elsewhere it is pulled just under the skin
-function shell(K, cover, off, m, sg = [50, 36]) {
+function shell(K, cover, off, m, sg = [64, 52]) {
   const S = K.shape;
-  return mk(warpSphere((x, y, z) => {
+  return mk(faceSphere((x, y, z) => {
     const p = S(x, y, z), t = cover(x, y, z), g = lerp(-0.006, typeof off === 'function' ? off(x, y, z) : off, t), L = Math.hypot(p[0], p[1], p[2]);
     return [p[0] * (L + g) / L, p[1] * (L + g) / L, p[2] * (L + g) / L];
   }, sg[0], sg[1]), m);
@@ -467,7 +503,7 @@ function shell(K, cover, off, m, sg = [50, 36]) {
 // hairline: y above which the scalp is covered, blended from the nape to the forehead
 const hairline = (front, back = -0.55, side = 0.0) => (x, y, z) => {
   const fz = sm(-0.35, 0.75, z), line = lerp(back, front, fz) + side * G1(z - 0.1, 0.3) - 0.1 * Math.abs(x) * fz;
-  return sm(line - 0.06, line + 0.06, y);
+  return sm(line - 0.08, line + 0.08, y);
 };
 function hairStyle(K, head, o) {
   const hm = K.mat('hair', o.hair, 'hair');
@@ -475,7 +511,7 @@ function hairStyle(K, head, o) {
   const lock = (pts, r0, r1, fl = [1, 0.55]) => head.add(mk(tube(pts.map((p) => (Array.isArray(p) ? new V3(...p) : p)), (t) => lerp(r0, r1, Math.pow(t, 0.8)), { n: 14, radial: 7, flat: fl }), hm));
   const st = o.style;
   if (st === 'short' || st === 'kid' || st === 'tail' || st === 'long' || st === 'bun' || st === 'crop') {
-    const front = st === 'tail' || st === 'bun' ? 0.42 : st === 'long' ? 0.4 : 0.44;
+    const front = st === 'tail' || st === 'bun' ? 0.36 : st === 'long' ? 0.36 : 0.38;
     const vol = st === 'kid' ? 0.016 : st === 'crop' ? 0.006 : st === 'short' ? 0.012 : 0.008;
     head.add(shell(K, hairline(front, st === 'long' ? -0.75 : -0.5, st === 'crop' ? -0.05 : 0.08), (x, y) => vol * (0.6 + 0.6 * sm(-0.2, 0.9, y)), hm));
   }
@@ -488,8 +524,6 @@ function hairStyle(K, head, o) {
   }
   if (st === 'kid') for (let k = 0; k < 7; k++) { const ux = -0.5 + k / 6, a = at(ux * 0.8, 0.5); lock([[a.x, a.y + 0.012, a.z + 0.004], [a.x + ux * 0.01, a.y - 0.014, a.z + 0.012], [a.x + ux * 0.02, a.y - 0.03, a.z + 0.004]], 0.012, 0.003); }
   if (st === 'tail') {
-    // side-swept fringe
-    for (let k = 0; k < 5; k++) { const ux = -0.35 + k * 0.14, a = at(ux, 0.62), m = at(ux + 0.18, 0.42), e = at(ux + 0.34, 0.3); lock([[a.x, a.y + 0.01, a.z + 0.004], [m.x, m.y + 0.006, m.z + 0.006], [e.x, e.y + 0.002, e.z + 0.002]], 0.011, 0.003, [1, 0.5]); }
     const b0 = at(0, 0.2); const z0 = -K.HP.d * 1.08;
     lock([[0, 0.05, z0 + 0.01], [0, 0.02, z0 - 0.025], [0, -0.07, z0 - 0.04], [0.006, -0.17, z0 - 0.03], [0.01, -0.26, z0 - 0.01]], 0.028, 0.008, [1, 0.8]);
     add(head, mk(new THREE.TorusGeometry(0.016, 0.005, 6, 12), K.mat('tie', '#3a2a1c', 'leather'), 0, 0.03, z0 - 0.022)).rotation.x = 1.2;
@@ -558,8 +592,8 @@ function hairStyle(K, head, o) {
 // ---------------------------------------------------------------------------
 // bodies
 const PROF = {
-  m: [[-0.02, 0.13], [0.0, 0.132], [0.07, 0.13], [0.14, 0.126], [0.22, 0.136], [0.3, 0.152], [0.37, 0.158], [0.43, 0.152], [0.475, 0.134], [0.51, 0.105], [0.535, 0.07], [0.558, 0.0]],
-  f: [[-0.02, 0.128], [0.0, 0.128], [0.08, 0.117], [0.15, 0.108], [0.24, 0.12], [0.31, 0.133], [0.37, 0.135], [0.43, 0.128], [0.47, 0.11], [0.505, 0.084], [0.53, 0.056], [0.55, 0.0]],
+  m: [[-0.02, 0.13], [0.0, 0.132], [0.07, 0.13], [0.14, 0.126], [0.22, 0.136], [0.3, 0.152], [0.37, 0.158], [0.43, 0.152], [0.47, 0.14], [0.505, 0.12], [0.535, 0.092], [0.558, 0.062], [0.575, 0.0]],
+  f: [[-0.02, 0.128], [0.0, 0.128], [0.08, 0.117], [0.15, 0.108], [0.24, 0.12], [0.31, 0.133], [0.37, 0.135], [0.43, 0.128], [0.47, 0.114], [0.505, 0.096], [0.535, 0.072], [0.555, 0.05], [0.57, 0.0]],
 };
 function profR(P, y) {
   if (y <= P[0][0]) return P[0][1];
@@ -602,14 +636,14 @@ function kit(o, rig) {
     : o.goblin ? (ph, y, r) => r + 0.03 * G1(y - 0.1, 0.08) * G1(ph, 0.9) : null;
   // torso layer between y0 and y1, grown outward by g
   K.torsoGeo = (y0, y1, g, fn) => {
-    const full = y0 <= -0.03 && y1 >= 0.56, a = full ? -0.025 : Math.max(-0.025, y0 - 0.004), z = full ? 0.56 : Math.min(0.56, y1 + 0.004);
+    const full = y0 <= -0.03 && y1 >= 0.56, a = full ? -0.025 : Math.max(-0.025, y0 - 0.004), z = full ? 0.572 : Math.min(0.572, y1 + 0.004);
     const pts = full ? [[0.0005, -0.035]] : [[Math.max(0.0005, profR(K.P, a) - 0.008), a - 0.004]];
     const n = Math.max(3, Math.ceil((z - a) / 0.011));
     for (let i = 0; i <= n; i++) {
       const y = lerp(a, z, i / n), inside = full ? 1 : sm(y0 - 0.007, y0 + 0.002, y) * (1 - sm(y1 - 0.002, y1 + 0.007, y));
       pts.push([Math.max(0.0005, profR(K.P, y) + lerp(-0.006, g, inside)), y]);
     }
-    pts.push(full ? [0.0005, 0.565] : [Math.max(0.0005, profR(K.P, z) - 0.008), z + 0.004]);
+    pts.push(full ? [0.0005, 0.578] : [Math.max(0.0005, profR(K.P, z) - 0.008), z + 0.004]);
     const bust = K.bust;
     return lathe(pts, { seg: 32, sx: K.SX, sz: K.SZ, fn: bust || fn ? (ph, y, r) => { if (bust) r = bust(ph, y, r); if (fn) r = fn(ph, y, r); return r; } : null });
   };
@@ -695,9 +729,9 @@ export function buildModel(kind) {
   hips.add(mk(lathe([[0.0005, -0.19], [0.085, -0.175], [0.13, -0.12], [0.138, -0.05], [0.13, 0.02], [0.0005, 0.03]], { seg: 28, sx: (fem ? 1.3 : 1.2) * b, sz: 0.86 * b }), M(cfg.legs)));
   K.layer(M(cfg.shirt), -1, 9, 0);
   // neck
-  torso.add(mk(limb(fem ? 0.046 : 0.058, fem ? 0.052 : 0.066, 0.13, { capT: 0.3, capB: 0.3 }), M(cfg.neck), 0, 0.64, -0.005));
+  torso.add(mk(limb(fem ? 0.047 : 0.059, fem ? 0.055 : 0.068, 0.11, { capT: 0.3, capB: 0.3 }), M(cfg.neck), 0, 0.605, 0.0));
   // head
-  const head = grp(torso, 0, 0.715, 0.008); rig.head = head; head.scale.setScalar(o.head || 1);
+  const head = grp(torso, 0, 0.68, 0.014); rig.head = head; head.scale.setScalar(o.head || 1);
   buildHead(K, head, o);
   hairStyle(K, head, o);
   // arms
@@ -858,7 +892,7 @@ const OUTFIT = {
       K.layer(gold, 0.495, 0.51, 0.022); K.layer(gold, 0.1, 0.113, 0.022);
       for (let k = 0; k < 3; k++) K.layer(st, 0.0 + k * 0.032 - 0.04, 0.03 + k * 0.032 - 0.04, 0.022 + k * 0.002);
       K.layer(K.mat('chain'), 0.505, 0.6, 0.012);
-      r.torso.add(mk(lathe([[0.09, 0.5], [0.088, 0.53], [0.07, 0.575], [0.063, 0.595], [0.0005, 0.6]], { seg: 24, sx: 1.18, sz: 1.08 }), st));
+      r.torso.add(mk(lathe([[0.1, 0.5], [0.095, 0.53], [0.072, 0.56], [0.066, 0.578], [0.0005, 0.58]], { seg: 24, sx: 1.18, sz: 1.08 }), st));
       K.belt(K.mat('darkleather'), -0.04, 0.04, 0.03, gold);
       // surcoat skirt and tassets
       K.skirt(K.mat('cloth'), 0.0, 0.42, 0.15, 0.2, { folds: 8, amp: 0.06, split: true });
@@ -1008,7 +1042,6 @@ const OUTFIT = {
       K.skirt(ap, 0.03, 0.55, 0.15, 0.2, { folds: 5, amp: 0.02, fn: (ph, y, rr) => (Math.abs(ph) < 1.0 ? rr + 0.008 : rr - 0.04) });
       K.belt(K.mat('rope'), 0.035, 0.025, 0.014);
       for (const sd of [-1, 1]) { const sh = sd < 0 ? r.armL : r.armR; sh.add(mk(limbPart(K.ru, K.lu, 0.88, 1.02, 0.012), K.mat('cloth'))); const kn = sd < 0 ? r.knL : r.knR; kn.add(mk(limbPart(K.rs, 0.41, 0.55, 0.92, 0.01), K.mat('boots'))); }
-      r.head.add(mk(lathe([[0.096, 0.045], [0.092, 0.07], [0.07, 0.11], [0.0005, 0.12]], { seg: 24, fn: (ph, y, rr) => rr * (1 + 0.06 * Math.sin(ph * 6)) }), K.mat('cap', '#5a4a38', 'cloth'), 0, 0.02, -0.012));
     },
   },
   kid: {
@@ -1113,7 +1146,7 @@ function skeletonBody(K, rig, o) {
   }
   for (let k = 0; k < 4; k++) torso.add(mk(blob(0.021, 0.017, 0.021), bone, 0, 0.545 + k * 0.034, -0.035 + k * 0.009));
   // rusty helmet and tattered tabard
-  const head = grp(torso, 0, 0.72, 0.005); rig.head = head;
+  const head = grp(torso, 0, 0.7, 0.005); rig.head = head;
   buildHead(K, head, o);
   const helm = shell(K, (x, y, z) => sm(0.3, 0.4, y), 0.012, dark, [40, 28]); head.add(helm);
   head.add(mk(new THREE.BoxGeometry(0.014, 0.05, 0.008), dark, 0, 0.045, 0.1));

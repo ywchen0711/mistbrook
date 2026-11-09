@@ -146,7 +146,7 @@ function portrait(a) {
   const s = a.rig.body.scale.x * a.rig.head.scale.x;
   const cam = new THREE.PerspectiveCamera(30, 1, 0.05, 20);
   if (a.rig.wolf) { cam.position.set(hp.x + 0.5, hp.y + 0.1, hp.z + 0.9); cam.lookAt(hp); }
-  else { cam.position.set(hp.x + 0.16 * s, hp.y + 0.03 * s, hp.z + 0.6 * s); cam.lookAt(hp.x, hp.y - 0.045 * s, hp.z); }
+  else { cam.position.set(hp.x + 0.17 * s, hp.y + 0.03 * s, hp.z + 0.66 * s); cam.lookAt(hp.x, hp.y - 0.05 * s, hp.z); }
   const S = 192, pr = renderer.getPixelRatio();
   renderer.setScissorTest(true); renderer.setViewport(0, 0, S, S); renderer.setScissor(0, 0, S, S);
   const fog = ps.fog; renderer.render(ps, cam);
