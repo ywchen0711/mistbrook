@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>霧溪之燈 Lantern of Mistbrook</title>
+<meta name="description" content="黃昏的霧溪村，晨星燈被偷了。帶著四人小隊，在等角視角的 3D 世界裡探索、對話、擲骰、回合制戰鬥。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Noto+Serif+TC:wght@500;700;900&family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=1">
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
+</script>
+</head>
+<body>
+<div id="stage"></div>
+<div id="floats"></div>
+
+<div id="hud" hidden>
+  <div id="party"></div>
+  <div id="quest"><b>目標</b><span></span></div>
+  <div id="topbtns">
+    <button id="b-menu" title="選單 (Esc)">☰</button>
+  </div>
+  <div id="init" hidden></div>
+  <div id="bottom">
+    <div id="who"></div>
+    <div id="res"></div>
+    <div id="hotbar"></div>
+    <div id="turnbox">
+      <button id="b-end">結束回合<small>空白鍵</small></button>
+    </div>
+  </div>
+  <div id="log"></div>
+  <div id="campad">
+    <button data-c="rl" title="向左轉 (Q)">⟲</button>
+    <button data-c="home" title="回到隊伍 (Home)">◎</button>
+    <button data-c="rr" title="向右轉 (E)">⟳</button>
+  </div>
+  <div id="tip" hidden></div>
+</div>
+
+<div id="caption" hidden></div>
+<div id="banner" hidden></div>
+<div id="bars"><i></i><i></i></div>
+
+<div id="dialog" hidden>
+  <div class="dbox">
+    <div class="dhead"><canvas class="dpor" width="96" height="96"></canvas><div><b class="dname"></b><small class="drole"></small></div></div>
+    <p class="dtext"></p>
+    <ol class="dopts"></ol>
+  </div>
+</div>
+
+<div id="dice" hidden>
+  <div class="dcard">
+    <div class="dlabel"></div>
+    <div class="die"><svg viewBox="0 0 100 100"><polygon points="50,4 92,28 92,72 50,96 8,72 8,28"/><polygon class="in" points="50,20 78,66 22,66"/><line x1="50" y1="4" x2="50" y2="20"/><line x1="92" y1="28" x2="78" y2="66"/><line x1="92" y1="72" x2="78" y2="66"/><line x1="50" y1="96" x2="78" y2="66"/><line x1="50" y1="96" x2="22" y2="66"/><line x1="8" y1="72" x2="22" y2="66"/><line x1="8" y1="28" x2="22" y2="66"/><line x1="8" y1="28" x2="50" y2="20"/><line x1="92" y1="28" x2="50" y2="20"/></svg><b>20</b></div>
+    <div class="dmath"></div>
+    <div class="dres"></div>
+  </div>
+</div>
+
+<div id="modal" hidden><div class="mbox"></div></div>
+
+<section id="title">
+  <div class="tbox">
+    <p class="kicker">一場黃昏到深夜的冒險</p>
+    <h1>霧溪之燈</h1>
+    <p class="en">LANTERN OF MISTBROOK</p>
+    <p class="lede">晨星燈被偷走了。沒有它，溪上的霧每晚都會漲得更高，而霧裡有東西在走動。<br>你帶著四個冒險者來到霧溪村。</p>
+    <div class="tbtns">
+      <button id="b-new" class="main">開始冒險</button>
+      <button id="b-cont" hidden>繼續（讀取存檔）</button>
+    </div>
+    <div class="row">
+      <label>畫質 <select id="quality"><option value="high">高</option><option value="med">中</option><option value="low">低</option></select></label>
+      <a href="/" class="home">← 回到遊戲場</a>
+    </div>
+    <p class="hint">滑鼠點地面移動、點敵人攻擊；右鍵拖曳或 Q/E 轉鏡頭、滾輪縮放、WASD 平移。手機：點一下移動，單指拖曳平移，雙指縮放旋轉。</p>
+  </div>
+</section>
+
+<script type="module" src="js/main.js?v=1"></script>
+</body>
+</html>
